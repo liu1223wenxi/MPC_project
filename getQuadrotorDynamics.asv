@@ -1,0 +1,139 @@
+clear all;
+close all;
+clc;
+
+%% Trasnformation Matrices
+% phi: roll angle
+% theta: pitch angle
+% psi: yaw angle
+syms phi(t) theta(t) psi(t)
+
+% Transformation matrix for angular velocities from inertial frame
+% to body frame
+W = [ 1,  0,        -sin(theta);
+      0,  cos(phi),  cos(theta)*sin(phi);
+      0, -sin(phi),  cos(theta)*cos(phi) ];
+
+% Rotation matrix R_ZYX from body frame to inertial frame
+R = rotationMatrixEulerZYX(phi,theta,psi);
+
+%% Equations of Motion
+% m: quadrotor mass
+% gr: gravity
+% u1: all thrust
+% u2: roll angle
+% u3: pitch angle
+% u4: yaw angle
+syms x(t) y(t) z(t)
+
+% Create state variables consisting of positions, angles,
+% and their derivatives
+state = [x; y; z; phi; theta; psi; diff(x,t); diff(y,t); ...
+    diff(z,t); diff(phi,t); diff(theta,t); diff(psi,t)];
+state = subsStateVars(state,t);
+
+syms m gr u1 u2 u3 u4
+syms Ix Iy Iz
+p = state(10);
+q = state(11);
+r = state(12);
+f = [ % Set time-derivative of the positions and angles
+      state(7:12);
+      % Equations for linear accelerations
+      (1/m)*(-(cos(phi)*cos(psi)*sin(theta) + sin(phi)*sin(psi))*u1); % x
+      (1/m)*(-(cos(phi)*sin(psi)*sin(theta) - cos(psi)*sin(phi))*u1); % y
+      ((cos(phi)*cos(theta))*u1/m) - gr; % z
+      % angular accelerations
+      (1/Ix)*(Iy-Iz)*q*r + u2 ; % Roll Acceleration
+      (1/Iy)*(Iz-Ix)*p*r + u3; % Pitch Acceleration
+      (1/Iz)*(Ix-Iy)*p*q + u4; % Yaw Acceleration
+];
+
+f = subsStateVars(f,t);
+
+% Replace fixed parameters with given values
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+IxVal = 0.0000582857;
+IyVal = 0.0000716914;
+IzVal = 0.0001;
+
+mVal = 0.083;
+grVal = 9.81;
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+f = subs(f, [Ix Iy Iz m gr], ...
+    [IxVal IyVal IzVal mVal grVal]);
+f = simplify(f);
+
+%% Jacobian func
+A = jacobian(f,state);
+control = [u1; u2; u3; u4];
+B = jacobian(f,control);
+
+%% Generate Files
+% Create QuadrotorStateFcn.m with current state and control
+% vectors as inputs and the state time-derivative as outputs
+matlabFunction(f,'File','QuadrotorStateFcn', ...
+    'Vars',{state,control});
+
+% Create QuadrotorStateJacobianFcn.m with current state and control
+% vectors as inputs and the Jacobians of the state time-derivative
+% as outputs
+matlabFunction(A,B,'File','QuadrotorStateJacobianFcn', ...
+    'Vars',{state,control});
+
+%%
+function R = rotationMatrixEulerZYX(phi,theta,psi)
+% Euler ZYX angles convention
+    Rx = [ 1,           0,          0;
+           0,           cos(phi),  -sin(phi);
+           0,           sin(phi),   cos(phi) ];
+    Ry = [ cos(theta),  0,          sin(theta);
+           0,           1,          0;
+          -sin(theta),  0,          cos(theta) ];
+    Rz = [cos(psi),    -sin(psi),   0;
+          sin(psi),     cos(psi),   0;
+          0,            0,          1 ];
+
+    % Return rotation matrix from body frame to inertial frame
+    R = Rz*Ry*Rx;
+end
+
+function stateExpr = subsStateVars(timeExpr,var)
+    if nargin == 1 
+        var = sym("t");
+    end
+    repDiff = @(ex) subsStateVarsDiff(ex,var);
+    stateExpr = mapSymType(timeExpr,"diff",repDiff);
+    repFun = @(ex) subsStateVarsFun(ex,var);
+    stateExpr = mapSymType(stateExpr,"symfunOf",var,repFun);
+    stateExpr = formula(stateExpr);
+end
+
+function newVar = subsStateVarsFun(funExpr,var)
+    name = symFunType(funExpr);
+    name = replace(name,"_Var","");
+    stateVar = "_" + char(var);
+    newVar = sym(name + stateVar);
+end
+
+function newVar = subsStateVarsDiff(diffExpr,var)
+    if nargin == 1 
+      var = sym("t");
+    end
+    c = children(diffExpr);
+    if ~isSymType(c{1},"symfunOf",var)
+      % not f(t)
+      newVar = diffExpr;
+      return;
+    end
+    if ~any([c{2:end}] == var)
+      % not derivative wrt t only
+      newVar = diffExpr;
+      return;
+    end
+    name = symFunType(c{1});
+    name = replace(name,"_Var","");
+    extension = "_" + join(repelem("d",numel(c)-1),"") + "ot";
+    stateVar = "_" + char(var);
+    newVar = sym(name + extension + stateVar);
+end

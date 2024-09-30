@@ -1,0 +1,27 @@
+clear all
+close all
+clc
+
+nx = 12;
+ny = 12;
+nu = 4;
+nlmpcobj = nlmpc(nx, ny, nu);
+
+% Specify the prediction model state function using the function name
+nlmpcobj.Model.StateFcn = "QuadrotorStateFcn";
+
+% Have Jacobians will significantly improves simulation efficiency.
+nlmpcobj.Jacobian.StateFcn = @QuadrotorStateJacobianFcn;
+
+% Fix the random generator seed for reproducibility.
+rng(0)
+
+% To check that your prediction model functions for nlobj are valid, 
+% use validateFcns for a random point in the state-input space.
+validateFcns(nlmpcobj,rand(nx,1),rand(nu,1));
+
+OutputWeight = [1 1 1 1 1 1 0.1 0.1 0.1 0.1 0.1 0.1];
+Control_inputs_range_m = 
+% open_system('untitled.slx');
+% 
+% simOut = sim('DroneNLMPC.slx');
