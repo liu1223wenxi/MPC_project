@@ -45,28 +45,40 @@ rng(0)
 % use validateFcns for a random point in the state-input space.
 validateFcns(nlmpcobj,rand(nx,1),rand(nu,1));
 
+thrust = load('Thrust_NeuralNetworkModelFromRegressionLearnerData.mat');
+roll = load('Roll_NeuralNetworkModelFromRegressionLearnerData.mat');
+pitch = load('Pitch_NeuralNetworkModelFromRegressionLearnerData.mat');
+yaw = load('Yaw_NeuralNetworkModelFromRegressionLearnerData.mat');
+
+% Pick controller mpc= 0, nn = 1, 
+Controller = 0;
 mdl = 'DroneSim.slx';
 open_system(mdl);
 % 
 simOut = sim(mdl);
 
 %%%%%%%%%%%% to excel %%%%%%%%%%%%%%
-%% Convert arrays to tables
-data_x = simOut.State;
-time_x = data_x.Time;
-State = data_x.Data;
+% %% Convert arrays to tables
+% data_x = simOut.State;
+% time_x = data_x.Time;
+% State = data_x.Data;
+% 
+% data_u = simOut.Control_input;
+% time_u = data_u.Time;
+% Control_input = data_u.Data;
+% 
+% stateTable = array2table([time_x State], 'VariableNames',...
+%     {'time_x', 'x', 'y', 'z', 'roll', 'pitch', 'yaw',...
+%      'xdot', 'ydot', 'zdot', 'p', 'q', 'r'});  % [x;y;z; roll;pitch;yaw; xdot;ydot;zdot; p;q;r]
+% controlInputTable = array2table([time_u Control_input], 'VariableNames',...
+%     {'time_u', 'thrust', 'roll angle', 'pitch angle', 'yaw angle'});  
+% 
+% emptyColumns = array2table(nan(height(stateTable), 1), 'VariableNames', {'Gap'});
+% combinedTable = [stateTable, emptyColumns, controlInputTable];
+% 
+% writetable(combinedTable, 'State_Control_10hr.xlsx', 'Sheet', 'CombinedData');
 
-data_u = simOut.Control_input;
-time_u = data_u.Time;
-Control_input = data_u.Data;
-
-stateTable = array2table([time_x State], 'VariableNames',...
-    {'time_x', 'x', 'y', 'z', 'roll', 'pitch', 'yaw',...
-     'xdot', 'ydot', 'zdot', 'p', 'q', 'r'});  % [x;y;z; roll;pitch;yaw; xdot;ydot;zdot; p;q;r]
-controlInputTable = array2table([time_u Control_input], 'VariableNames',...
-    {'time_u', 'thrust', 'roll angle', 'pitch angle', 'yaw angle'});  
-
-emptyColumns = array2table(nan(height(stateTable), 1), 'VariableNames', {'Gap'});
-combinedTable = [stateTable, emptyColumns, controlInputTable];
-
-writetable(combinedTable, 'State_Control_10hr.xlsx', 'Sheet', 'CombinedData');
+%% Animation
+xHistory = simOut.State.Data;
+time = simOut.State.Time;
+animateQuadrotorTrajectory;
